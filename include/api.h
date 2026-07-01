@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <MinHook.h>
+#include <windows.h>
 
 constexpr uintptr_t BASE = 0;
 
@@ -43,6 +44,53 @@ bool Hook(T& original, T hook)
     return true;
 }
 
+void main();
 
-//inline auto set_lava_walls_6F7D0 = RVA<void(*)()>(0x6F7D0);
-//inline auto give_mutation_6FC80 = RVA<void(*)(body*, int, int*, int, bool)>(0x6FC80);
+DWORD WINAPI MainThread(LPVOID)
+{
+    AllocConsole();
+
+    FILE* file;
+    freopen_s(&file, "CONOUT$", "w", stdout);
+
+    printf("Hello from the injected DLL!\n");
+
+    if (MH_Initialize() != MH_OK)
+    {
+        printf("MinHook init failed\n");
+        return 0;
+    }
+    printf("MinHook initialized\n");
+
+    log_printf_218C0((char*)"Running with mods!");
+
+    main();
+
+    while (true)
+    {
+        Sleep(1000);
+    }
+
+    return 0;
+}
+
+BOOL APIENTRY DllMain(
+    HMODULE module,
+    DWORD reason,
+    LPVOID)
+{
+    if (reason == DLL_PROCESS_ATTACH)
+    {
+        DisableThreadLibraryCalls(module);
+
+        CreateThread(
+            nullptr,
+            0,
+            MainThread,
+            nullptr,
+            0,
+            nullptr);
+    }
+
+    return TRUE;
+}
