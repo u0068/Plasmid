@@ -11,6 +11,11 @@ constexpr T RVA(uintptr_t rva)
         reinterpret_cast<uintptr_t>(GetModuleHandle(nullptr)) + rva);
 }
 
+// This needs to be AFTER the RVA def
+#include "primordialis_data/data_types.h"
+#include "primordialis_data/data_labels.h""
+#include "primordialis_data/function_declarations.h"
+
 template<typename T>
 bool Hook(T& original, T hook)
 {
@@ -38,10 +43,6 @@ bool Hook(T& original, T hook)
     return true;
 }
 
-// This needs to be after RVA def
-#include "data_types.h"
-//#include "data_exports.h""
-#include "function_exports.h"
 
 //inline auto set_lava_walls_6F7D0 = RVA<void(*)()>(0x6F7D0);
 //inline auto give_mutation_6FC80 = RVA<void(*)(body*, int, int*, int, bool)>(0x6FC80);
