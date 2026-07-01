@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include "external/minhook/include/MinHook.h"
+#include <MinHook.h>
 
 constexpr uintptr_t BASE = 0;
 

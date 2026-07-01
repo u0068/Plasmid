@@ -1,6 +1,6 @@
 #include <windows.h>
 #include <cstdio>
-#include "external/minhook/include/MinHook.h"
+#include <MinHook.h>
 #include "include/api.h"
 #include "include/function_exports.h"
 
