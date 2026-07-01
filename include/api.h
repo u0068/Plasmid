@@ -11,12 +11,6 @@ constexpr T RVA(uintptr_t rva)
         reinterpret_cast<uintptr_t>(GetModuleHandle(nullptr)) + rva);
 }
 
-// inline auto set_lava_walls =
-//     RVA<void(*)()>(0x6F7D0);
-//
-// inline auto give_mutation =
-//     RVA<void(*)(body*, int, int*, int, bool)>(0x6FC80);
-
 template<typename T>
 bool Hook(T& original, T hook)
 {
@@ -43,3 +37,12 @@ bool Hook(T& original, T hook)
 
     return true;
 }
+
+// This needs to be after RVA def
+#include "forward_declarations.h"
+#include "data_types.h"
+//#include "data_exports.h""
+#include "function_exports.h"
+
+//inline auto set_lava_walls_6F7D0 = RVA<void(*)()>(0x6F7D0);
+//inline auto give_mutation_6FC80 = RVA<void(*)(body*, int, int*, int, bool)>(0x6FC80);
