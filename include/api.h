@@ -39,7 +39,6 @@ bool Hook(T& original, T hook)
 }
 
 // This needs to be after RVA def
-#include "forward_declarations.h"
 #include "data_types.h"
 //#include "data_exports.h""
 #include "function_exports.h"

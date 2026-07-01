@@ -11,15 +11,15 @@ void hooked_give_mutation(body *param_1,int param_2,int *param_3,int param_4,boo
 
     // putting this here so i can turn it on at will in the right context
 
-    // int n_materials = *reinterpret_cast<int(*)>(base + 0x1ed808);
-    // printf("%d\n", n_materials);
-    //
-    // material_t** materials_list = reinterpret_cast<material_t**>(base + 0x1ed800); // i have no idea what im doing lmao
-    // int cell_type_index = n_materials + 1;
-    // (*materials_list)[cell_type_index] = (*materials_list)[1];
-    // (*materials_list)[cell_type_index].base_cost = 43.f;
-    // (*materials_list)[cell_type_index].movement_force = 0.5f;
-    // (*materials_list)[cell_type_index].base_color = real_4(1., 0.5, 1., 1.);
+    int n_materials = *RVA<int(*)>(0x1ed808);
+    printf("%d\n", n_materials);
+
+    material_t* materials_list = *RVA<material_t**>( 0x1ed800); // i have no idea what im doing lmao
+    int cell_type_index = n_materials + 1;
+    materials_list[cell_type_index] = materials_list[1];
+    materials_list[cell_type_index].base_cost = 43.f;
+    materials_list[cell_type_index].movement_force = 0.5f;
+    materials_list[cell_type_index].base_color = real_4(real_4_u_0(real_4_u_0_s_0(1.f, 0.5f, 1.f, 1.f)));
 }
 
 DWORD WINAPI MainThread(LPVOID)
