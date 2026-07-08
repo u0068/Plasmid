@@ -85,20 +85,17 @@ DWORD WINAPI MainThread(LPVOID)
         return 0;
     }
 
-    printf("Found API %i\n", api_dll);
-    Sleep(1000);
+    printf("Found API\n", api_dll);
 
     GetFunctionAddressRaw = reinterpret_cast<void(*)(uintptr_t&, const char*)>(GetProcAddress(api_dll, "GetFunctionAddress"));
 
     if (!GetFunctionAddressRaw)
     {
-        // so fuckckcked
-        printf("Nuuuut\n");
+        printf("No GetFunctionAddress found\n");
         return 0;
     }
 
-    printf("Found function get function\n");
-    Sleep(1000);
+    printf("Found GetFunctionAddress\n");
 
     main();
 
