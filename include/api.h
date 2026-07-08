@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <MinHook.h>
 #include <windows.h>
+#include <unordered_map>
+#include <string>
 
 constexpr uintptr_t BASE = 0;
 
@@ -14,8 +16,20 @@ constexpr T RVA(uintptr_t rva)
 
 // This needs to be AFTER the RVA def
 #include "primordialis_data/data_types.h"
-#include "primordialis_data/data_labels.h""
-#include "primordialis_data/function_declarations.h"
+#include "primordialis_data/data_labels.h"
+//#include "primordialis_data/function_declarations.h"
+
+extern"C" __declspec(dllexport) bool READY = false;
+
+HMODULE api_dll;
+
+std::unordered_map<std::string, uintptr_t>* function_decls = nullptr;
+
+template<typename T>
+uintptr_t GetFunctionAddress(T& target, std::string func_name)
+{
+    target = reinterpret_cast<T>(GetModuleHandle(nullptr)) + function_decls->at(func_name);
+}
 
 template<typename T>
 bool Hook(T& original, T hook)
@@ -62,9 +76,19 @@ DWORD WINAPI MainThread(LPVOID)
     }
     printf("MinHook initialized\n");
 
-    log_printf_218C0((char*)"Running with mods!");
+    api_dll = GetModuleHandleA("plasmid_api.dll"); // assume api is loaded first
+    
+    if (api_dll == nullptr)
+    {
+        printf("No API loaded\n");
+        return 0;
+    }
+
+    function_decls = reinterpret_cast<std::unordered_map<std::string, uintptr_t>*>((uintptr_t)GetProcAddress(api_dll, "FUNC_DECLS"));
 
     main();
+
+    READY = true;
 
     while (true)
     {
