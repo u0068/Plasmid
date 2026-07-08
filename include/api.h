@@ -17,18 +17,19 @@ constexpr T RVA(uintptr_t rva)
 // This needs to be AFTER the RVA def
 #include "primordialis_data/data_types.h"
 #include "primordialis_data/data_labels.h"
+#include <tlhelp32.h>
 //#include "primordialis_data/function_declarations.h"
 
 extern"C" __declspec(dllexport) bool READY = false;
 
 HMODULE api_dll;
 
-std::unordered_map<std::string, uintptr_t>* function_decls = nullptr;
+void(*GetFunctionAddressRaw)(uintptr_t&, const char*) = nullptr;
 
 template<typename T>
-void GetFunctionAddress(T& target, std::string func_name)
+void GetFunctionAddress(T& target, std::string name)
 {
-    target = reinterpret_cast<T>(reinterpret_cast<uintptr_t>(GetModuleHandle(nullptr)) + function_decls->at(func_name));
+    GetFunctionAddressRaw(reinterpret_cast<uintptr_t&>(target), name.c_str());
 }
 
 template<typename T>
@@ -76,15 +77,28 @@ DWORD WINAPI MainThread(LPVOID)
     }
     printf("MinHook initialized\n");
 
-    api_dll = GetModuleHandleA("plasmid_api.dll"); // assume api is loaded first
+    api_dll = GetModuleHandleW(L"plasmid_api.dll"); // assume api is loaded first
     
-    if (api_dll == nullptr)
+    if (!api_dll)
     {
         printf("No API loaded\n");
         return 0;
     }
 
-    function_decls = reinterpret_cast<std::unordered_map<std::string, uintptr_t>*>((uintptr_t)GetProcAddress(api_dll, "FUNC_DECLS"));
+    printf("Found API %i\n", api_dll);
+    Sleep(1000);
+
+    GetFunctionAddressRaw = reinterpret_cast<void(*)(uintptr_t&, const char*)>(GetProcAddress(api_dll, "GetFunctionAddress"));
+
+    if (!GetFunctionAddressRaw)
+    {
+        // so fuckckcked
+        printf("Nuuuut\n");
+        return 0;
+    }
+
+    printf("Found function get function\n");
+    Sleep(1000);
 
     main();
 

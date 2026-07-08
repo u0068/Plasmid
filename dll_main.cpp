@@ -24,7 +24,7 @@ void hooked_init_materials_list()
 void main()
 {
     GetFunctionAddress(init_materials_list, "init_materials_list");
-    GetFunctionAddress(give_mutation, "give_mutation");
+    GetFunctionAddress(give_mutation, "give_mutation_body_ptr_int_int_ptr_int_bool");
     GetFunctionAddress(set_lava_walls, "set_lava_walls");
     Hook(give_mutation, hooked_give_mutation);
     Hook(init_materials_list, hooked_init_materials_list);
