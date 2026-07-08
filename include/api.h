@@ -26,9 +26,9 @@ HMODULE api_dll;
 std::unordered_map<std::string, uintptr_t>* function_decls = nullptr;
 
 template<typename T>
-uintptr_t GetFunctionAddress(T& target, std::string func_name)
+void GetFunctionAddress(T& target, std::string func_name)
 {
-    target = reinterpret_cast<T>(GetModuleHandle(nullptr)) + function_decls->at(func_name);
+    target = reinterpret_cast<T>(reinterpret_cast<uintptr_t>(GetModuleHandle(nullptr)) + function_decls->at(func_name));
 }
 
 template<typename T>
