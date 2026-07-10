@@ -25,6 +25,9 @@ extern"C" __declspec(dllexport) bool READY = false;
 HMODULE api_dll;
 
 void(*GetFunctionAddressRaw)(uintptr_t&, const char*) = nullptr;
+void(*UpdateFunctionAddressRaw)(uintptr_t, const char*) = nullptr;
+
+SYNCHRONIZATION_BARRIER gBarrier;
 
 template<typename T>
 void GetFunctionAddress(T& target, std::string name)
@@ -59,6 +62,36 @@ bool Hook(T& original, T hook)
     return true;
 }
 
+template<typename T>
+bool Hook(const char* target_name, T hook, T& original)
+{
+    GetFunctionAddress(original, target_name);
+    void* target = reinterpret_cast<void*>(original);
+
+    auto status = MH_CreateHook(
+        target,
+        reinterpret_cast<void*>(hook),
+        reinterpret_cast<void**>(&original));
+
+    if (status != MH_OK)
+    {
+        printf("MH_CreateHook failed: %d\n", status);
+        return false;
+    }
+
+    status = MH_EnableHook(target);
+
+    if (status != MH_OK)
+    {
+        printf("MH_EnableHook failed: %d\n", status);
+        return false;
+    }
+
+    UpdateFunctionAddressRaw(reinterpret_cast<uintptr_t>(original), target_name);
+
+    return true;
+}
+
 void main();
 
 DWORD WINAPI MainThread(LPVOID)
@@ -85,17 +118,18 @@ DWORD WINAPI MainThread(LPVOID)
         return 0;
     }
 
-    printf("Found API\n", api_dll);
+    printf("Found API\n");
 
     GetFunctionAddressRaw = reinterpret_cast<void(*)(uintptr_t&, const char*)>(GetProcAddress(api_dll, "GetFunctionAddress"));
+    UpdateFunctionAddressRaw = reinterpret_cast<void(*)(uintptr_t, const char*)>(GetProcAddress(api_dll, "UpdateFunctionAddress"));
 
-    if (!GetFunctionAddressRaw)
+    if (!GetFunctionAddressRaw || !UpdateFunctionAddressRaw)
     {
-        printf("No GetFunctionAddress found\n");
+        printf("Missing Func Utility\n");
         return 0;
     }
 
-    printf("Found GetFunctionAddress\n");
+    printf("Found API Func Utility\n");
 
     main();
 
