@@ -11,24 +11,21 @@ void hooked_give_mutation(body *param_1,int param_2,int *param_3,int param_4,boo
     set_lava_walls();
 }
 
-void hooked_init_materials_list()
-{
-    init_materials_list();
-    int* threadsafe = reinterpret_cast<int*>(TlsGetValue(*tls_index));
-    if (*threadsafe == 0)
-    {
-        printf("%i\n", *n_materials);
-        (*materials_list)[*n_materials] = (*materials_list)[(*n_materials) - 20];
-        (*materials_list)[*n_materials].base_cost = float(*n_materials);
-        (*materials_list)[*n_materials].movement_force = 0.5f;
-        (*materials_list)[*n_materials].base_color = real_4(real_4_u_0(real_4_u_0_s_0(0.f, 0.f, 0.f, 1.f)));
-        *n_materials = *n_materials + 1;
-    }
-}
-
 void main()
 {
+    APIUtil::CreateUtilInstance();
+
     GetFunctionAddress(set_lava_walls, "set_lava_walls");
     Hook("give_mutation_body_ptr_int_int_ptr_int", hooked_give_mutation, give_mutation);
-    Hook("init_materials_list", hooked_init_materials_list, init_materials_list);
+
+    // Add a black heat sink cell that does nothing
+
+    APIUtil::QueueAddCell(APIUtil::AddCellCall{
+        .cell = {
+            .simple = {
+                .copyFrom = 18, // heat sink cell id = 18
+                .color = { 0.f, 0.f, 0.f, 1.f }
+            }   
+        }
+    });
 }
