@@ -94,9 +94,16 @@ bool Hook(const char* target_name, T hook, T& original)
     return true;
 }
 
-struct APIUtil
+static struct APIUtil
 {
-    inline static APIUtil* instance = nullptr;
+    static APIUtil* instance;
+
+    enum InitMatAddType
+    {
+        complex = 0,
+        simple = 1,
+        function = 2
+    };
 
     struct AddCellCallSimple
     {
@@ -107,16 +114,28 @@ struct APIUtil
         void (*connection_update_fn)(struct cell*) = nullptr;
         void (*brain_fn)(struct cell*) = nullptr;
         void (*destroyed_fn)(struct cell*) = nullptr;
-
-        real_4_u_0_s_0 color = {0.f, 0.f, 0.f, 1.f};
+        real_4_u_0_s_0 color = { 0.f, 0.f, 0.f, 1.f };
     };
+
+    struct CellFunctionOverwrite
+    {
+        void (*physics_update_fn)(struct cell*) = nullptr;
+        void (*force_update_fn)(struct cell*) = nullptr;
+        void (*electric_update_fn)(struct cell*) = nullptr;
+        void (*connection_update_fn)(struct cell*) = nullptr;
+        void (*brain_fn)(struct cell*) = nullptr;
+        void (*destroyed_fn)(struct cell*) = nullptr;
+        uint idx = 0;
+    };
+
     struct AddCellCall
     {
-        bool is_simple = true;
+        APIUtil::InitMatAddType type = APIUtil::InitMatAddType::simple;
 
         union context {
             AddCellCallSimple simple;
             material_t extensive;
+            CellFunctionOverwrite function;
         };
 
         context cell;
@@ -126,6 +145,7 @@ struct APIUtil
 
     // store commonly used stuff here
     void(*init_materials_list)() = nullptr;
+    uint(*str_to_id)(char*) = nullptr;
     ulong* tls_index = nullptr;
     int* n_materials;
     material_t** materials_list;
@@ -137,6 +157,7 @@ struct APIUtil
         GetDataAddressRaw(reinterpret_cast<uintptr_t&>(tls_index), "tls_index");
         GetDataAddressRaw(reinterpret_cast<uintptr_t&>(n_materials), "n_materials");
         GetDataAddressRaw(reinterpret_cast<uintptr_t&>(materials_list), "materials_list");
+        GetFunctionAddress(str_to_id, "str_to_id");
     }
 
     static void CreateUtilInstance()
@@ -170,7 +191,7 @@ struct APIUtil
         (*instance->materials_list)[*instance->n_materials] = (*instance->materials_list)[copyFrom];
         (*instance->materials_list)[*instance->n_materials].base_cost = float(*instance->n_materials);
         (*instance->materials_list)[*instance->n_materials].movement_force = 0.5f;
-        (*instance->materials_list)[*instance->n_materials].base_color = real_4(real_4_u_0(color));
+        (*instance->materials_list)[*instance->n_materials].base_color = real_4{real_4_u_0{color}};
 
         (*instance->materials_list)[*instance->n_materials].physics_update_fn = physics_update_fn;
         (*instance->materials_list)[*instance->n_materials].force_update_fn = force_update_fn;
@@ -194,7 +215,7 @@ struct APIUtil
         {
             for (int i = 0; i < cells2add.size(); i++)
             {
-                if (cells2add[i].is_simple)
+                if (cells2add[i].type == APIUtil::InitMatAddType::simple)
                 {
                     APIUtil::AddCell(
                         cells2add[i].cell.simple.color,
@@ -206,7 +227,7 @@ struct APIUtil
                         cells2add[i].cell.simple.destroyed_fn
                     );
                 }
-                else
+                else if (cells2add[i].type == APIUtil::InitMatAddType::complex)
                 {
                     if (*instance->n_materials >= 2048)
                     {
@@ -216,6 +237,24 @@ struct APIUtil
 
                     *materials_list[*n_materials] = cells2add[i].cell.extensive;
                     *n_materials += 1;
+                }
+                else
+                {
+                    /*
+                    we have to search for a cell again because vanilla cells will never be loaded at the start of game
+                    order of vanilla cells can change per version, if modder wants a faster method can add themselves easily
+                    */
+
+                    uint idx = GetCellIdxById(cells2add[i].cell.function.idx);
+                    if (!idx)
+                        continue;
+
+                    (*instance->materials_list)[idx].physics_update_fn = cells2add[i].cell.function.physics_update_fn;
+                    (*instance->materials_list)[idx].force_update_fn = cells2add[i].cell.function.force_update_fn;
+                    (*instance->materials_list)[idx].electric_update_fn = cells2add[i].cell.function.electric_update_fn;
+                    (*instance->materials_list)[idx].connection_update_fn = cells2add[i].cell.function.connection_update_fn;
+                    (*instance->materials_list)[idx].brain_fn = cells2add[i].cell.function.brain_fn;
+                    (*instance->materials_list)[idx].destroyed_fn = cells2add[i].cell.function.destroyed_fn;
                 }
             }
         }
@@ -228,12 +267,44 @@ struct APIUtil
 
     static void APIHookAllUtil()
     {
-        printf("hooking all yoooo\n");
         Hook("init_materials_list", AddAllCellsHook, instance->init_materials_list);
     };
 
+    static uint GetCellIdxdByStr(const char* cell)
+    {
+        uint search = instance->str_to_id(const_cast<char*>("MUSL"));
+        for (int i = 1; i < *instance->n_materials; i++)
+        {
+            if ((*instance->materials_list)[i].id == search)
+                return i;
+        }
+        return 0;
+    }
+    static uint GetCellIdxById(uint search)
+    {
+        for (int i = 1; i < *instance->n_materials; i++)
+        {
+            if ((*instance->materials_list)[i].id == search)
+                return i;
+        }
+        return 0;
+    }
 
+    static void OverwriteCellFunction(const char* cell, const CellFunctionOverwrite& overwrite)
+    {
+        uint idx = instance->str_to_id(const_cast<char*>(cell));
+        if (idx)
+        {
+            AddCellCall ncall{};
+            ncall.type = InitMatAddType::function;
+            ncall.cell.function = overwrite;
+            ncall.cell.function.idx = idx;
+            instance->cells2add.push_back(ncall);
+        }
+    }
 };
+
+APIUtil* APIUtil::instance = nullptr;
 
 void main();
 
