@@ -117,6 +117,13 @@ static struct APIUtil
         real_4_u_0_s_0 color = { 0.f, 0.f, 0.f, 1.f };
     };
 
+    struct AddCellCallEx
+    {
+        uint copyFrom;
+        void(*overwrite)(material_t*);
+        uint newId;
+    };
+
     struct CellFunctionOverwrite
     {
         void (*physics_update_fn)(struct cell*) = nullptr;
@@ -134,21 +141,36 @@ static struct APIUtil
 
         union context {
             AddCellCallSimple simple;
-            material_t extensive;
+            AddCellCallEx extensive;
             CellFunctionOverwrite function;
         };
 
         context cell;
     };
 
-    std::vector<AddCellCall> cells2add;
+    struct UpdateWorkCall
+    {
+        char* traceName = const_cast<char*>("no trace name");
+        void(*call)();
+    };
 
-    // store commonly used stuff here
-    void(*init_materials_list)() = nullptr;
+    std::vector<AddCellCall> cells2add;
+    std::vector<UpdateWorkCall> update_cells_work_append;
+
+    // common fn
     uint(*str_to_id)(char*) = nullptr;
+    void* (*begin_trace_stage)(char* name) = nullptr;
+
+    // common v
+    world* w;
     ulong* tls_index = nullptr;
     int* n_materials;
     material_t** materials_list;
+    real_2* hex_rots;
+
+    // hook targets
+    void(*init_materials_list)() = nullptr;// NOTE: only call AFTER APIHookUtil has been called
+    void (*update_cells)(render_context*, render_context*, user_input*) = nullptr;// NOTE: only call AFTER APIHookUtil has been called
 
     APIUtil() {};
     
@@ -157,7 +179,10 @@ static struct APIUtil
         GetDataAddressRaw(reinterpret_cast<uintptr_t&>(tls_index), "tls_index");
         GetDataAddressRaw(reinterpret_cast<uintptr_t&>(n_materials), "n_materials");
         GetDataAddressRaw(reinterpret_cast<uintptr_t&>(materials_list), "materials_list");
+        GetDataAddressRaw(reinterpret_cast<uintptr_t&>(hex_rots), "hex_rots");
+        GetDataAddressRaw(reinterpret_cast<uintptr_t&>(w), "w");
         GetFunctionAddress(str_to_id, "str_to_id");
+        GetFunctionAddress(begin_trace_stage, "begin_trace_stage");
     }
 
     static void CreateUtilInstance()
@@ -235,7 +260,13 @@ static struct APIUtil
                         return;
                     }
 
-                    *materials_list[*n_materials] = cells2add[i].cell.extensive;
+                    uint idx = GetCellIdxById(cells2add[i].cell.extensive.copyFrom);
+                    if (!idx)
+                        continue;
+
+                    (*materials_list)[*n_materials] = (*materials_list)[cells2add[i].cell.extensive.copyFrom];
+                    (*materials_list)[*n_materials].id = cells2add[i].cell.extensive.newId;
+                    cells2add[i].cell.extensive.overwrite(&((*materials_list)[*n_materials]));
                     *n_materials += 1;
                 }
                 else
@@ -260,14 +291,29 @@ static struct APIUtil
         }
     }
 
+    void DoAllUpdateCellsWork() // called after vanilla cell-related update functions
+    {
+        for (int i = 0; i < update_cells_work_append.size(); i++)
+        {
+            begin_trace_stage(update_cells_work_append[i].traceName);
+            update_cells_work_append[i].call();
+        }
+    }
+
     static void AddAllCellsHook()
     {
         instance->AddAllCells();
+    }
+    static void AddAllWorkHook(render_context* param_1, render_context* param_2, user_input* param_3)
+    {
+        instance->update_cells(param_1, param_2, param_3);
+        instance->DoAllUpdateCellsWork();
     }
 
     static void APIHookAllUtil()
     {
         Hook("init_materials_list", AddAllCellsHook, instance->init_materials_list);
+        Hook("init_materials_list", AddAllWorkHook, instance->update_cells);
     };
 
     static uint GetCellIdxdByStr(const char* cell)
