@@ -1,33 +1,28 @@
 #include "include/api.h"
 
-auto set_lava_walls =
-    Resolve<void(*)()>(
-        "set_lava_walls"
-    );
-
-
-void hooked_lava_walls()
-{
-
-}
+// void hooked_init_mats()
+// {
+//     APIUtil::init_materials_list();
+//
+//     (*APIUtil::materials_list)[*APIUtil::n_materials] = (*APIUtil::materials_list)[26];
+//     (*APIUtil::materials_list)[*APIUtil::n_materials].base_color = real_4(real_4_u_0(real_4_u_0_s_0(1.0, 0.5, 1.0, 1.0)));
+//     *APIUtil::n_materials += 1;
+// }
 
 void mod_main()
 {
-    printf("mod_main\n");
 
-    printf("%p\n", set_lava_walls);
+    printf("Hello World!\n");
 
-    Hook(set_lava_walls, hooked_lava_walls);
+    // Hook(APIUtil::init_materials_list, hooked_init_mats);
 
-    // Add a black heat sink cell that does nothing
+    APIUtil::QueueAddCell(APIUtil::AddCellCall({.cell{{
+            26,
+            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+            real_4_u_0_s_0(1.,0.5,1.,1.)
+        }}})
+    );
 
-    // APIUtil::QueueAddCell(APIUtil::AddCellCall{
-    //     .cell = {
-    //         .simple = {
-    //             .copyFrom = 18, // heat sink cell id = 18
-    //             .color = { 0.f, 0.f, 0.f, 1.f }
-    //         }
-    //     }
-    // });
+    APIUtil::APIHookAllUtil();
 }
 

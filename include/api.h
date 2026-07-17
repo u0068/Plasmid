@@ -13,37 +13,6 @@
 
 extern"C" __declspec(dllexport) bool READY = false;
 
-template<typename T>
-bool Hook(T& original, T hook)
-{
-    printf("Attempting Hooking.\n");
-
-    void* target = reinterpret_cast<void*>(original);
-
-    auto status = MH_CreateHook(
-        target,
-        reinterpret_cast<void*>(hook),
-        reinterpret_cast<void**>(&original));
-
-    if (status != MH_OK)
-    {
-        printf("MH_CreateHook failed: %d\n", status);
-        return false;
-    }
-
-    status = MH_EnableHook(target);
-
-    if (status != MH_OK)
-    {
-        printf("MH_EnableHook failed: %d\n", status);
-        return false;
-    }
-
-    printf("Hooking successful!\n");
-
-    return true;
-}
-
 uintptr_t ResolveSymbol(const char* name)
 {
     static bool initialized = false;
@@ -75,11 +44,18 @@ uintptr_t ResolveSymbol(const char* name)
     if (!SymFromName(GetCurrentProcess(), name, symbol))
     {
         printf(
-            "Failed to resolve symbol '%s': %lu\n",
+            "Failed to resolve symbol '%s' at address  %p: %lu\n",
             name,
+            reinterpret_cast<void*>(symbol->Address),
             GetLastError()
         );
         return 0;
+    } else
+    {
+        printf("Successfully resolved symbol '%s' at address %p\n",
+            name,
+            reinterpret_cast<void*>(symbol->Address)
+        );
     }
 
     return static_cast<uintptr_t>(symbol->Address);
@@ -100,16 +76,46 @@ T Resolve(const char* name)
     return reinterpret_cast<T>(addr);
 }
 
-static struct APIUtil
+template<typename T>
+bool Hook(T& original, T hook)
 {
-    static APIUtil* instance;
+    void* target = reinterpret_cast<void*>(original);
 
+    printf("Attempting Hooking address %p\n", target);
+
+    auto status = MH_CreateHook(
+        target,
+        reinterpret_cast<void*>(hook),
+        reinterpret_cast<void**>(&original));
+
+    if (status != MH_OK)
+    {
+        printf("MH_CreateHook failed: %d\n", status);
+        return false;
+    }
+
+    status = MH_EnableHook(target);
+
+    if (status != MH_OK)
+    {
+        printf("MH_EnableHook failed: %d\n", status);
+        return false;
+    }
+
+    printf("Hooking successful!\n");
+
+    return true;
+}
+
+namespace APIUtil
+{
     enum InitMatAddType
     {
         complex = 0,
         simple = 1,
         function = 2
     };
+
 
     struct AddCellCallSimple
     {
@@ -160,46 +166,47 @@ static struct APIUtil
         void(*call)();
     };
 
-    std::vector<AddCellCall> cells2add;
-    std::vector<UpdateWorkCall> update_cells_work_append;
+    static std::vector<AddCellCall> cells2add;
+    static std::vector<UpdateWorkCall> update_cells_work_append;
 
     // common fn
-    uint(*str_to_id)(char*) = nullptr;
-    void* (*begin_trace_stage)(char* name) = nullptr;
+    static auto str_to_id = Resolve<uint(*)(char*)>("str_to_id");
+    static auto begin_trace_stage = Resolve<void*(*)(char*)>("begin_trace_stage");
 
     // common v
-    world* w;
-    ulong* tls_index = nullptr;
-    int* n_materials;
-    material_t** materials_list;
-    real_2* hex_rots;
+    static world* w = Resolve<world*>("w");
+    static ulong* tls_index = Resolve<ulong*>("tls_index");
+    static int* n_materials = Resolve<int*>("n_materials");
+    static material_t** materials_list = Resolve<material_t**>("materials_list");
+    static real_2* hex_rots = Resolve<real_2*>("hex_rots");
 
     // hook targets
-    void(*init_materials_list)() = nullptr;// NOTE: only call AFTER APIHookUtil has been called
-    void (*update_cells)(render_context*, render_context*, user_input*) = nullptr;// NOTE: only call AFTER APIHookUtil has been called
+    static auto init_materials_list = Resolve<void(*)()>("init_materials_list");
+    static auto update_cells = Resolve<void(*)(render_context*, render_context*, user_input*)>("update_cells");
 
-    APIUtil() {};
-
-    // void InitCommon()
-    // {
-    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(tls_index), "tls_index");
-    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(n_materials), "n_materials");
-    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(materials_list), "materials_list");
-    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(hex_rots), "hex_rots");
-    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(w), "w");
-    //     GetFunctionAddress(str_to_id, "str_to_id");
-    //     GetFunctionAddress(begin_trace_stage, "begin_trace_stage");
-    // }
-
-    // static void CreateUtilInstance()
-    // {
-    //     instance = new APIUtil; // dont need to worry about memory cleanup, only needs to be destroyed when primordialis closes, which deletes it anyway
-    //     instance->InitCommon();
-    // }
+    static uint GetCellIdxdByStr(const char* cell)
+    {
+        uint search = str_to_id(const_cast<char*>("MUSL"));
+        for (int i = 1; i < *n_materials; i++)
+        {
+            if ((*materials_list)[i].id == search)
+                return i;
+        }
+        return 0;
+    }
+    static uint GetCellIdxById(uint search)
+    {
+        for (int i = 1; i < *n_materials; i++)
+        {
+            if ((*materials_list)[i].id == search)
+                return i;
+        }
+        return 0;
+    }
 
     static void QueueAddCell(const AddCellCall& addcell)
     {
-        instance->cells2add.push_back(addcell);
+        cells2add.push_back(addcell);
     }
 
     static void AddCell(
@@ -213,25 +220,25 @@ static struct APIUtil
         void (*destroyed_fn)(struct cell*) = nullptr
     )
     {
-        if (*instance->n_materials >= 2048)
+        if (*n_materials >= 2048)
         {
-            printf("Cell count is at maximum !\n");
+            printf("Material count is at maximum !\n");
             return;
         }
 
-        (*instance->materials_list)[*instance->n_materials] = (*instance->materials_list)[copyFrom];
-        (*instance->materials_list)[*instance->n_materials].base_cost = float(*instance->n_materials);
-        (*instance->materials_list)[*instance->n_materials].movement_force = 0.5f;
-        (*instance->materials_list)[*instance->n_materials].base_color = real_4{real_4_u_0{color}};
+        (*materials_list)[*n_materials] = (*materials_list)[copyFrom];
+        (*materials_list)[*n_materials].base_cost = float(*n_materials);
+        (*materials_list)[*n_materials].movement_force = 0.5f;
+        (*materials_list)[*n_materials].base_color = real_4{real_4_u_0{color}};
 
-        (*instance->materials_list)[*instance->n_materials].physics_update_fn = physics_update_fn;
-        (*instance->materials_list)[*instance->n_materials].force_update_fn = force_update_fn;
-        (*instance->materials_list)[*instance->n_materials].electric_update_fn = electric_update_fn;
-        (*instance->materials_list)[*instance->n_materials].connection_update_fn = connection_update_fn;
-        (*instance->materials_list)[*instance->n_materials].brain_fn = brain_fn;
-        (*instance->materials_list)[*instance->n_materials].destroyed_fn = destroyed_fn;
+        (*materials_list)[*n_materials].physics_update_fn = physics_update_fn;
+        (*materials_list)[*n_materials].force_update_fn = force_update_fn;
+        (*materials_list)[*n_materials].electric_update_fn = electric_update_fn;
+        (*materials_list)[*n_materials].connection_update_fn = connection_update_fn;
+        (*materials_list)[*n_materials].brain_fn = brain_fn;
+        (*materials_list)[*n_materials].destroyed_fn = destroyed_fn;
 
-        *instance->n_materials = *instance->n_materials + 1;
+        *n_materials = *n_materials + 1;
 
         // automatically make a new hook
 
@@ -260,7 +267,7 @@ static struct APIUtil
                 }
                 else if (cells2add[i].type == APIUtil::InitMatAddType::complex)
                 {
-                    if (*instance->n_materials >= 2048)
+                    if (*n_materials >= 2048)
                     {
                         printf("Cell count is at maximum !\n");
                         return;
@@ -286,12 +293,12 @@ static struct APIUtil
                     if (!idx)
                         continue;
 
-                    (*instance->materials_list)[idx].physics_update_fn = cells2add[i].cell.function.physics_update_fn;
-                    (*instance->materials_list)[idx].force_update_fn = cells2add[i].cell.function.force_update_fn;
-                    (*instance->materials_list)[idx].electric_update_fn = cells2add[i].cell.function.electric_update_fn;
-                    (*instance->materials_list)[idx].connection_update_fn = cells2add[i].cell.function.connection_update_fn;
-                    (*instance->materials_list)[idx].brain_fn = cells2add[i].cell.function.brain_fn;
-                    (*instance->materials_list)[idx].destroyed_fn = cells2add[i].cell.function.destroyed_fn;
+                    (*materials_list)[idx].physics_update_fn = cells2add[i].cell.function.physics_update_fn;
+                    (*materials_list)[idx].force_update_fn = cells2add[i].cell.function.force_update_fn;
+                    (*materials_list)[idx].electric_update_fn = cells2add[i].cell.function.electric_update_fn;
+                    (*materials_list)[idx].connection_update_fn = cells2add[i].cell.function.connection_update_fn;
+                    (*materials_list)[idx].brain_fn = cells2add[i].cell.function.brain_fn;
+                    (*materials_list)[idx].destroyed_fn = cells2add[i].cell.function.destroyed_fn;
                 }
             }
         }
@@ -308,55 +315,34 @@ static struct APIUtil
 
     static void AddAllCellsHook()
     {
-        instance->AddAllCells();
+        AddAllCells();
     }
     static void AddAllWorkHook(render_context* param_1, render_context* param_2, user_input* param_3)
     {
-        instance->update_cells(param_1, param_2, param_3);
-        instance->DoAllUpdateCellsWork();
+        update_cells(param_1, param_2, param_3);
+        DoAllUpdateCellsWork();
     }
 
-    // static void APIHookAllUtil()
-    // {
-    //     Hook("init_materials_list", AddAllCellsHook, instance->init_materials_list);
-    //     Hook("init_materials_list", AddAllWorkHook, instance->update_cells);
-    // };
-
-    static uint GetCellIdxdByStr(const char* cell)
+    static void APIHookAllUtil()
     {
-        uint search = instance->str_to_id(const_cast<char*>("MUSL"));
-        for (int i = 1; i < *instance->n_materials; i++)
-        {
-            if ((*instance->materials_list)[i].id == search)
-                return i;
-        }
-        return 0;
-    }
-    static uint GetCellIdxById(uint search)
-    {
-        for (int i = 1; i < *instance->n_materials; i++)
-        {
-            if ((*instance->materials_list)[i].id == search)
-                return i;
-        }
-        return 0;
-    }
+        printf("%p\n", init_materials_list);
+        Hook(init_materials_list, AddAllCellsHook);
+        Hook(update_cells, AddAllWorkHook);
+    };
 
     static void OverwriteCellFunction(const char* cell, const CellFunctionOverwrite& overwrite)
     {
-        uint idx = instance->str_to_id(const_cast<char*>(cell));
+        uint idx = str_to_id(const_cast<char*>(cell));
         if (idx)
         {
             AddCellCall ncall{};
             ncall.type = InitMatAddType::function;
             ncall.cell.function = overwrite;
             ncall.cell.function.idx = idx;
-            instance->cells2add.push_back(ncall);
+            cells2add.push_back(ncall);
         }
     }
 };
-
-APIUtil* APIUtil::instance = nullptr;
 
 void mod_main();
 
@@ -367,7 +353,7 @@ DWORD WINAPI MainThread(LPVOID)
     FILE* file;
     freopen_s(&file, "CONOUT$", "w", stdout);
 
-    printf("Hello from Plasmid!\n");
+    //printf("Hello from Plasmid!\n");
 
     if (MH_Initialize() != MH_OK)
     {
