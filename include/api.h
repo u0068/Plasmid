@@ -2,44 +2,22 @@
 #include <cstdint>
 #include <MinHook.h>
 #include <windows.h>
-#include <unordered_map>
 #include <string>
-
-/*constexpr uintptr_t BASE = 0;
-
-template<typename T>
-constexpr T RVA(uintptr_t rva)
-{
-    return reinterpret_cast<T>(
-        reinterpret_cast<uintptr_t>(GetModuleHandle(nullptr)) + rva);
-}*/
-
-// This needs to be AFTER the RVA def
+#include <unordered_map>
 #include "primordialis_data/data_types.h"
-//#include "primordialis_data/data_labels.h"
 #include <tlhelp32.h>
-//#include "primordialis_data/function_declarations.h"
-
 #include <vector>
 
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+
 extern"C" __declspec(dllexport) bool READY = false;
-
-HMODULE api_dll;
-
-void(*GetFunctionAddressRaw)(uintptr_t&, const char*) = nullptr;
-void(*UpdateFunctionAddressRaw)(uintptr_t, const char*) = nullptr;
-void(*GetDataAddressRaw)(uintptr_t&, const char*) = nullptr;
-void(*UpdateDataAddressRaw)(uintptr_t, const char*) = nullptr;
-
-template<typename T>
-void GetFunctionAddress(T& target, std::string name)
-{
-    GetFunctionAddressRaw(reinterpret_cast<uintptr_t&>(target), name.c_str());
-}
 
 template<typename T>
 bool Hook(T& original, T hook)
 {
+    printf("Attempting Hooking.\n");
+
     void* target = reinterpret_cast<void*>(original);
 
     auto status = MH_CreateHook(
@@ -60,38 +38,66 @@ bool Hook(T& original, T hook)
         printf("MH_EnableHook failed: %d\n", status);
         return false;
     }
+
+    printf("Hooking successful!\n");
 
     return true;
 }
 
-template<typename T>
-bool Hook(const char* target_name, T hook, T& original)
+uintptr_t ResolveSymbol(const char* name)
 {
-    GetFunctionAddress(original, target_name);
-    void* target = reinterpret_cast<void*>(original);
+    static bool initialized = false;
 
-    auto status = MH_CreateHook(
-        target,
-        reinterpret_cast<void*>(hook),
-        reinterpret_cast<void**>(&original));
-
-    if (status != MH_OK)
+    if (!initialized)
     {
-        printf("MH_CreateHook failed: %d\n", status);
-        return false;
+        SymSetOptions(
+            SYMOPT_UNDNAME |
+            SYMOPT_DEFERRED_LOADS
+        );
+
+        if (!SymInitialize(GetCurrentProcess(), nullptr, TRUE))
+        {
+            printf("SymInitialize failed: %lu\n", GetLastError());
+            return 0;
+        }
+
+        initialized = true;
     }
 
-    status = MH_EnableHook(target);
+    char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME];
+    memset(buffer, 0, sizeof(buffer));
 
-    if (status != MH_OK)
+    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(buffer);
+
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol->MaxNameLen = MAX_SYM_NAME;
+
+    if (!SymFromName(GetCurrentProcess(), name, symbol))
     {
-        printf("MH_EnableHook failed: %d\n", status);
-        return false;
+        printf(
+            "Failed to resolve symbol '%s': %lu\n",
+            name,
+            GetLastError()
+        );
+        return 0;
     }
 
-    UpdateFunctionAddressRaw(reinterpret_cast<uintptr_t>(original), target_name);
+    return static_cast<uintptr_t>(symbol->Address);
+}
 
-    return true;
+template<typename T>
+T Resolve(const char* name)
+{
+    static std::unordered_map<std::string, uintptr_t> cache;
+
+    auto it = cache.find(name);
+    if (it != cache.end())
+        return reinterpret_cast<T>(it->second);
+
+    uintptr_t addr = ResolveSymbol(name);
+    cache[name] = addr;
+
+    return reinterpret_cast<T>(addr);
 }
 
 static struct APIUtil
@@ -173,23 +179,23 @@ static struct APIUtil
     void (*update_cells)(render_context*, render_context*, user_input*) = nullptr;// NOTE: only call AFTER APIHookUtil has been called
 
     APIUtil() {};
-    
-    void InitCommon()
-    {
-        GetDataAddressRaw(reinterpret_cast<uintptr_t&>(tls_index), "tls_index");
-        GetDataAddressRaw(reinterpret_cast<uintptr_t&>(n_materials), "n_materials");
-        GetDataAddressRaw(reinterpret_cast<uintptr_t&>(materials_list), "materials_list");
-        GetDataAddressRaw(reinterpret_cast<uintptr_t&>(hex_rots), "hex_rots");
-        GetDataAddressRaw(reinterpret_cast<uintptr_t&>(w), "w");
-        GetFunctionAddress(str_to_id, "str_to_id");
-        GetFunctionAddress(begin_trace_stage, "begin_trace_stage");
-    }
 
-    static void CreateUtilInstance()
-    {
-        instance = new APIUtil; // dont need to worry about memory cleanup, only needs to be destroyed when primordialis closes, which deletes it anyway
-        instance->InitCommon();
-    }
+    // void InitCommon()
+    // {
+    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(tls_index), "tls_index");
+    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(n_materials), "n_materials");
+    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(materials_list), "materials_list");
+    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(hex_rots), "hex_rots");
+    //     GetDataAddressRaw(reinterpret_cast<uintptr_t&>(w), "w");
+    //     GetFunctionAddress(str_to_id, "str_to_id");
+    //     GetFunctionAddress(begin_trace_stage, "begin_trace_stage");
+    // }
+
+    // static void CreateUtilInstance()
+    // {
+    //     instance = new APIUtil; // dont need to worry about memory cleanup, only needs to be destroyed when primordialis closes, which deletes it anyway
+    //     instance->InitCommon();
+    // }
 
     static void QueueAddCell(const AddCellCall& addcell)
     {
@@ -310,11 +316,11 @@ static struct APIUtil
         instance->DoAllUpdateCellsWork();
     }
 
-    static void APIHookAllUtil()
-    {
-        Hook("init_materials_list", AddAllCellsHook, instance->init_materials_list);
-        Hook("init_materials_list", AddAllWorkHook, instance->update_cells);
-    };
+    // static void APIHookAllUtil()
+    // {
+    //     Hook("init_materials_list", AddAllCellsHook, instance->init_materials_list);
+    //     Hook("init_materials_list", AddAllWorkHook, instance->update_cells);
+    // };
 
     static uint GetCellIdxdByStr(const char* cell)
     {
@@ -352,7 +358,7 @@ static struct APIUtil
 
 APIUtil* APIUtil::instance = nullptr;
 
-void main();
+void mod_main();
 
 DWORD WINAPI MainThread(LPVOID)
 {
@@ -361,7 +367,7 @@ DWORD WINAPI MainThread(LPVOID)
     FILE* file;
     freopen_s(&file, "CONOUT$", "w", stdout);
 
-    //printf("Hello from the injected DLL!\n");
+    printf("Hello from Plasmid!\n");
 
     if (MH_Initialize() != MH_OK)
     {
@@ -370,32 +376,7 @@ DWORD WINAPI MainThread(LPVOID)
     }
     printf("MinHook initialized\n");
 
-    api_dll = GetModuleHandleW(L"plasmid_api.dll"); // assume api is loaded first
-    
-    if (!api_dll)
-    {
-        printf("No API loaded\n");
-        return 0;
-    }
-
-    //printf("Found API\n");
-
-    GetFunctionAddressRaw = reinterpret_cast<void(*)(uintptr_t&, const char*)>(GetProcAddress(api_dll, "GetFunctionAddress"));
-    UpdateFunctionAddressRaw = reinterpret_cast<void(*)(uintptr_t, const char*)>(GetProcAddress(api_dll, "UpdateFunctionAddress"));
-    GetDataAddressRaw = reinterpret_cast<void(*)(uintptr_t&, const char*)>(GetProcAddress(api_dll, "GetDataAddress"));
-    UpdateDataAddressRaw = reinterpret_cast<void(*)(uintptr_t, const char*)>(GetProcAddress(api_dll, "UpdateDataAddress"));
-
-    if (!GetFunctionAddressRaw || !UpdateFunctionAddressRaw)
-    {
-        printf("Missing Func Utility\n");
-        return 0;
-    }
-
-    //printf("Found API Func Utility\n");
-
-    main();
-
-    APIUtil::APIHookAllUtil();
+    mod_main();
 
     READY = true;
 

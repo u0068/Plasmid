@@ -6,8 +6,7 @@ project(Plasmid)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_library(Plasmid SHARED
-        dll_main.cpp
-        include/api.h)
+        dll_main.cpp)
 
 add_subdirectory(external/minhook)
 
