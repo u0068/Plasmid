@@ -1,5 +1,5 @@
 # Plasmid API
-A WIP C++ API for Primordialis mods.
+A WIP modding API for C++ mods, made for the [Pilus Modloader](https://github.com/u0068/Pilus)
 
 ## AIMS:
 - C++ API (Plasmid API)
