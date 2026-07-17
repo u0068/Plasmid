@@ -5,25 +5,22 @@ A WIP modding API for C++ mods, made for the [Pilus Modloader](https://github.co
 - C++ API (Plasmid API)
 - Extend the LUA API
 ## TODO:
-- Unscuff the super scuffed temporary solutions
-  - RVAs in function names
-  - struct constructor overloading
-- Organisation
-  - Organise directories (DONE)
-  - Organise functions
-  - Organise data labels
-  - Organise data types
-- Helper functions
-  - main() (DONE)
-  - Cell creation
 - Lua API
 - External mod config and assets
 - Documentation
 - Examples
 - Tutorials
 ## Done
-- Make a DLL (DONE)
-- Precompute relevant symbol addresses (DONE)
+- Unscuff the super scuffed temporary solutions (DONE)
+- Organisation (DONE)
+  - Organise directories (DONE)
+  - Organise functions (DONE)
+  - Organise data labels (DONE)
+  - Organise data types (DONE)
+- Helper functions (DONE)
+  - mod_main() (DONE)
+  - Cell creation (DONE)
+- Precompute relevant symbol ~~addresses~~ resolutions (DONE)
     - Functions (DONE)
     - Labels (DONE)
 - Precompute data type definitions (DONE)
@@ -31,3 +28,4 @@ A WIP modding API for C++ mods, made for the [Pilus Modloader](https://github.co
     - Unions (DONE)
     - Enums (DONE)
 - Hook functions (DONE)
+- Make a DLL (DONE)
