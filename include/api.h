@@ -150,7 +150,8 @@ bool Hook(const char* target_name, T hook)
 
 namespace APIUtil
 {
-    //#include "primordialis_data/resolve_functions.h"
+    #include "primordialis_data/resolve_functions.h"
+    #include "primordialis_data/resolve_data.h"
 
     enum InitMatAddType
     {
@@ -215,22 +216,22 @@ namespace APIUtil
     // static auto str_to_id = Resolve<uint(*)(char*)>("str_to_id");
     // static auto begin_trace_stage = Resolve<void*(*)(char*)>("begin_trace_stage");
 
-    inline uint str_to_id(char* param_1) { return GetFunction<uint(*)(char*)>("str_to_id")(param_1); }
-    inline void* begin_trace_stage(char* param_1) { return GetFunction<void*(*)(char*)>("begin_trace_stage")(param_1); }
+    // inline uint str_to_id(char* param_1) { return GetFunction<uint(*)(char*)>("str_to_id")(param_1); }
+    // inline void* begin_trace_stage(char* param_1) { return GetFunction<void*(*)(char*)>("begin_trace_stage")(param_1); }
 
     // common v
-    static auto w = Resolve<world*>("w");
-    static auto tls_index = Resolve<ulong*>("tls_index");
-    static auto n_materials = Resolve<int*>("n_materials");
-    static auto materials_list = Resolve<material_t**>("materials_list");
-    static auto hex_rots = Resolve<real_2*>("hex_rots");
+    // static auto w = Resolve<world*>("w");
+    // static auto tls_index = Resolve<ulong*>("tls_index");
+    // static auto n_materials = Resolve<int*>("n_materials");
+    // static auto materials_list = Resolve<material_t**>("materials_list");
+    // static auto hex_rots = Resolve<real_2*>("hex_rots");
 
     // hook targets
     //static auto init_materials_list = Resolve<void(*)()>("init_materials_list");
     //static auto update_cells = Resolve<void(*)(render_context*, render_context*, user_input*)>("update_cells");
 
-    static void init_materials_list() { return GetFunction<void(*)()>("init_materials_list")(); }
-    static void update_cells(render_context* param_1, render_context* param_2, user_input* param_3) { return GetFunction<void(*)(render_context*, render_context*, user_input*)>("update_cells")(param_1, param_2, param_3); }
+    // static void init_materials_list() { return GetFunction<void(*)()>("init_materials_list")(); }
+    // static void update_cells(render_context* param_1, render_context* param_2, user_input* param_3) { return GetFunction<void(*)(render_context*, render_context*, user_input*)>("update_cells")(param_1, param_2, param_3); }
 
     static uint GetCellIdxdByStr(const char* cell)
     {
