@@ -13,7 +13,7 @@
 
 extern"C" __declspec(dllexport) bool READY = false;
 
-uintptr_t ResolveSymbol(const char* name)
+void* ResolveSymbol(const char* name)
 {
     static bool initialized = false;
 
@@ -44,7 +44,7 @@ uintptr_t ResolveSymbol(const char* name)
     if (!SymFromName(GetCurrentProcess(), name, symbol))
     {
         printf(
-            "Failed to resolve symbol '%s' at address  %p: %lu\n",
+            "Failed to resolve symbol '%s' at address %p: %lu\n",
             name,
             reinterpret_cast<void*>(symbol->Address),
             GetLastError()
@@ -58,22 +58,35 @@ uintptr_t ResolveSymbol(const char* name)
         );
     }
 
-    return static_cast<uintptr_t>(symbol->Address);
+    return reinterpret_cast<void*>(symbol->Address);
 }
 
 template<typename T>
 T Resolve(const char* name)
 {
-    static std::unordered_map<std::string, uintptr_t> cache;
+    static std::unordered_map<std::string, void*> cache;
 
     auto it = cache.find(name);
     if (it != cache.end())
         return reinterpret_cast<T>(it->second);
 
-    uintptr_t addr = ResolveSymbol(name);
+    void* addr = ResolveSymbol(name);
     cache[name] = addr;
 
     return reinterpret_cast<T>(addr);
+}
+
+template<typename T>
+T& GetFunction(const char* name)
+{
+    static std::unordered_map<std::string, T> functions;
+
+    auto& fn = functions[name];
+
+    if (!fn)
+        fn = Resolve<T>(name);
+
+    return fn;
 }
 
 template<typename T>
@@ -107,15 +120,44 @@ bool Hook(T& original, T hook)
     return true;
 }
 
+template<typename T>
+bool Hook(const char* target_name, T hook)
+{
+    void* target = ResolveSymbol(target_name);
+    auto& original = GetFunction<decltype(hook)>(target_name);
+
+    auto status = MH_CreateHook(
+        target,
+        reinterpret_cast<void*>(hook),
+        reinterpret_cast<void**>(&original));
+
+    if (status != MH_OK)
+    {
+        printf("MH_CreateHook failed: %d\n", status);
+        return false;
+    }
+
+    status = MH_EnableHook(target);
+
+    if (status != MH_OK)
+    {
+        printf("MH_EnableHook failed: %d\n", status);
+        return false;
+    }
+
+    return true;
+}
+
 namespace APIUtil
 {
+    //#include "primordialis_data/resolve_functions.h"
+
     enum InitMatAddType
     {
         complex = 0,
         simple = 1,
         function = 2
     };
-
 
     struct AddCellCallSimple
     {
@@ -170,19 +212,25 @@ namespace APIUtil
     static std::vector<UpdateWorkCall> update_cells_work_append;
 
     // common fn
-    static auto str_to_id = Resolve<uint(*)(char*)>("str_to_id");
-    static auto begin_trace_stage = Resolve<void*(*)(char*)>("begin_trace_stage");
+    // static auto str_to_id = Resolve<uint(*)(char*)>("str_to_id");
+    // static auto begin_trace_stage = Resolve<void*(*)(char*)>("begin_trace_stage");
+
+    inline uint str_to_id(char* param_1) { return GetFunction<uint(*)(char*)>("str_to_id")(param_1); }
+    inline void* begin_trace_stage(char* param_1) { return GetFunction<void*(*)(char*)>("begin_trace_stage")(param_1); }
 
     // common v
-    static world* w = Resolve<world*>("w");
-    static ulong* tls_index = Resolve<ulong*>("tls_index");
-    static int* n_materials = Resolve<int*>("n_materials");
-    static material_t** materials_list = Resolve<material_t**>("materials_list");
-    static real_2* hex_rots = Resolve<real_2*>("hex_rots");
+    static auto w = Resolve<world*>("w");
+    static auto tls_index = Resolve<ulong*>("tls_index");
+    static auto n_materials = Resolve<int*>("n_materials");
+    static auto materials_list = Resolve<material_t**>("materials_list");
+    static auto hex_rots = Resolve<real_2*>("hex_rots");
 
     // hook targets
-    static auto init_materials_list = Resolve<void(*)()>("init_materials_list");
-    static auto update_cells = Resolve<void(*)(render_context*, render_context*, user_input*)>("update_cells");
+    //static auto init_materials_list = Resolve<void(*)()>("init_materials_list");
+    //static auto update_cells = Resolve<void(*)(render_context*, render_context*, user_input*)>("update_cells");
+
+    static void init_materials_list() { return GetFunction<void(*)()>("init_materials_list")(); }
+    static void update_cells(render_context* param_1, render_context* param_2, user_input* param_3) { return GetFunction<void(*)(render_context*, render_context*, user_input*)>("update_cells")(param_1, param_2, param_3); }
 
     static uint GetCellIdxdByStr(const char* cell)
     {
@@ -325,9 +373,8 @@ namespace APIUtil
 
     static void APIHookAllUtil()
     {
-        printf("%p\n", init_materials_list);
-        Hook(init_materials_list, AddAllCellsHook);
-        Hook(update_cells, AddAllWorkHook);
+        Hook("init_materials_list", AddAllCellsHook);
+        Hook("update_cells", AddAllWorkHook);
     };
 
     static void OverwriteCellFunction(const char* cell, const CellFunctionOverwrite& overwrite)
