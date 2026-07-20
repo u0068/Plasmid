@@ -62,35 +62,19 @@ void* ResolveSymbol(const char* name)
 }
 
 template<typename T>
-T Resolve(const char* name)
+T& Resolve(const char* name)
 {
-    static std::unordered_map<std::string, void*> cache;
+    static std::unordered_map<std::string, T> cache;
 
-    auto it = cache.find(name);
-    if (it != cache.end())
-        return reinterpret_cast<T>(it->second);
+    auto& addr = cache[name];
 
-    void* addr = ResolveSymbol(name);
-    cache[name] = addr;
+    if (!addr)
+        addr = reinterpret_cast<T>(ResolveSymbol(name));
 
-    return reinterpret_cast<T>(addr);
+    return addr;
 }
 
-template<typename T>
-T& GetFunction(const char* name)
-{
-    static std::unordered_map<std::string, T> functions;
-
-    auto& fn = functions[name];
-
-    if (!fn)
-        fn = Resolve<T>(name);
-
-    return fn;
-}
-
-template<typename T>
-bool Hook(T& original, T hook)
+bool Hook(auto& original, auto hook)
 {
     void* target = reinterpret_cast<void*>(original);
 
@@ -120,11 +104,10 @@ bool Hook(T& original, T hook)
     return true;
 }
 
-template<typename T>
-bool Hook(const char* target_name, T hook)
+bool Hook(const char* target_name, auto hook)
 {
     void* target = ResolveSymbol(target_name);
-    auto& original = GetFunction<decltype(hook)>(target_name);
+    auto& original = Resolve<decltype(hook)>(target_name);
 
     auto status = MH_CreateHook(
         target,
@@ -211,27 +194,6 @@ namespace APIUtil
 
     static std::vector<AddCellCall> cells2add;
     static std::vector<UpdateWorkCall> update_cells_work_append;
-
-    // common fn
-    // static auto str_to_id = Resolve<uint(*)(char*)>("str_to_id");
-    // static auto begin_trace_stage = Resolve<void*(*)(char*)>("begin_trace_stage");
-
-    // inline uint str_to_id(char* param_1) { return GetFunction<uint(*)(char*)>("str_to_id")(param_1); }
-    // inline void* begin_trace_stage(char* param_1) { return GetFunction<void*(*)(char*)>("begin_trace_stage")(param_1); }
-
-    // common v
-    // static auto w = Resolve<world*>("w");
-    // static auto tls_index = Resolve<ulong*>("tls_index");
-    // static auto n_materials = Resolve<int*>("n_materials");
-    // static auto materials_list = Resolve<material_t**>("materials_list");
-    // static auto hex_rots = Resolve<real_2*>("hex_rots");
-
-    // hook targets
-    //static auto init_materials_list = Resolve<void(*)()>("init_materials_list");
-    //static auto update_cells = Resolve<void(*)(render_context*, render_context*, user_input*)>("update_cells");
-
-    // static void init_materials_list() { return GetFunction<void(*)()>("init_materials_list")(); }
-    // static void update_cells(render_context* param_1, render_context* param_2, user_input* param_3) { return GetFunction<void(*)(render_context*, render_context*, user_input*)>("update_cells")(param_1, param_2, param_3); }
 
     static uint GetCellIdxdByStr(const char* cell)
     {
